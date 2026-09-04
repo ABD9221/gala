@@ -58,12 +58,45 @@ CREATE TABLE IF NOT EXISTS places (
     category_final     VARCHAR,
     category_source    VARCHAR,
     category_confidence DOUBLE,
-    duplicate_of       VARCHAR
+    duplicate_of       VARCHAR,
+    -- SerpApi enrichment (gala.enrich.serpapi). Google-derived and therefore
+    -- NOT part of the owned corpus: refreshed on a TTL, never treated as
+    -- permanent. See the module docstring for why the distinction matters.
+    serpapi_rating     DOUBLE,
+    serpapi_reviews    INTEGER,
+    serpapi_hours      VARCHAR,
+    serpapi_price      VARCHAR,
+    serpapi_place_id   VARCHAR,
+    serpapi_fetched_at TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS places_lonlat ON places (lon, lat);
 CREATE INDEX IF NOT EXISTS places_category ON places (category);
 """
+
+
+# Columns added after the first release. `CREATE TABLE IF NOT EXISTS` will not
+# alter a table that already exists, so a store built by an earlier version is
+# missing them and every query naming one fails to bind. Applied on every
+# writable open, which is cheap and keeps upgrades from being a manual step.
+MIGRATIONS = [
+    "ALTER TABLE places ADD COLUMN IF NOT EXISTS category_final VARCHAR",
+    "ALTER TABLE places ADD COLUMN IF NOT EXISTS category_source VARCHAR",
+    "ALTER TABLE places ADD COLUMN IF NOT EXISTS category_confidence DOUBLE",
+    "ALTER TABLE places ADD COLUMN IF NOT EXISTS duplicate_of VARCHAR",
+    "ALTER TABLE places ADD COLUMN IF NOT EXISTS serpapi_rating DOUBLE",
+    "ALTER TABLE places ADD COLUMN IF NOT EXISTS serpapi_reviews INTEGER",
+    "ALTER TABLE places ADD COLUMN IF NOT EXISTS serpapi_hours VARCHAR",
+    "ALTER TABLE places ADD COLUMN IF NOT EXISTS serpapi_price VARCHAR",
+    "ALTER TABLE places ADD COLUMN IF NOT EXISTS serpapi_place_id VARCHAR",
+    "ALTER TABLE places ADD COLUMN IF NOT EXISTS serpapi_fetched_at TIMESTAMP",
+]
+
+
+def migrate(con: duckdb.DuckDBPyConnection) -> None:
+    """Bring an older store up to the current schema."""
+    for ddl in MIGRATIONS:
+        con.execute(ddl)
 
 
 def connect(db_path: str | os.PathLike[str] | None = None, *, read_only: bool = False) -> duckdb.DuckDBPyConnection:
@@ -75,6 +108,7 @@ def connect(db_path: str | os.PathLike[str] | None = None, *, read_only: bool = 
         con.execute(f"INSTALL {ext}; LOAD {ext};")
     if not read_only:
         con.execute(SCHEMA)
+        migrate(con)
     return con
 
 

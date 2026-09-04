@@ -145,19 +145,15 @@ class QualityReport:
 
 
 def ensure_columns(con: duckdb.DuckDBPyConnection) -> None:
-    """Backfill the repair columns on a store created before they existed.
+    """Ensure the repair columns exist.
 
-    They are part of ``store.SCHEMA`` now -- the index and every query read
-    them, so a database missing them fails to build at all. This remains for
-    upgrading a store written by an earlier version.
+    Delegates to ``store.migrate`` so the schema is defined in exactly one
+    place; kept as a name here because the repair functions are also called
+    directly against connections opened elsewhere.
     """
-    for ddl in (
-        "ALTER TABLE places ADD COLUMN IF NOT EXISTS category_final VARCHAR",
-        "ALTER TABLE places ADD COLUMN IF NOT EXISTS category_source VARCHAR",
-        "ALTER TABLE places ADD COLUMN IF NOT EXISTS category_confidence DOUBLE",
-        "ALTER TABLE places ADD COLUMN IF NOT EXISTS duplicate_of VARCHAR",
-    ):
-        con.execute(ddl)
+    from .store import migrate
+
+    migrate(con)
 
 
 def harmonize_categories(con: duckdb.DuckDBPyConnection) -> QualityReport:

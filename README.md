@@ -1,16 +1,92 @@
-# gala — an open-data places API
+# gala — find local businesses that need a website
 
-A working Google Places replacement built from open data: **Overture Maps** for
-the corpus, **OpenStreetMap** for opening hours and Arabic names,
-**Wikidata/Wikimedia Commons** for photos. No API key, no per-call billing, no
-restriction on storing what you fetch.
+A prospecting tool for web developers, built on an open-data places corpus:
+**Overture Maps** for the businesses, **OpenStreetMap** for Arabic names and
+opening hours, **Wikidata** for photos, optional **SerpApi** for Google ratings.
+No API key needed for the core, no per-query billing.
 
-Every number below was measured on a real build of the Olaya district in
-Riyadh (bbox `46.665,24.700,46.690,24.725`), not estimated.
+It answers one question: *which businesses near me are real, reachable, and have
+no website?* In the Olaya district of Riyadh that is **284 prospects out of
+1,506 places**, ranked so the ones worth calling are at the top.
 
 ```bash
 pip install -r requirements.txt
-python scripts/build.py olaya          # ingest -> enrich -> repair -> index
+python scripts/build.py olaya                    # build the corpus (~2 min)
+python scripts/leads.py olaya --csv leads.csv    # rank prospects, export
+```
+
+```
+  #  score  name                    category       phone            presence
+  1  0.837  Cilicia                 restaurant     +966114655678    instagram
+  2  0.837  Back Yard Grill         restaurant     +966500654018    whatsapp
+  3  0.830  Lalingi                 restaurant     +966555036792    instagram
+  6  0.814  Viola                   wedding_plan   +966550888166    free site builder
+  8  0.795  ألفا كافيه               coffee_shop    +966502192245    google business stub
+  9  0.789  Dr. Mustafa Mansour     dentist        +966507896250    google link
+```
+
+Underneath it is a full places search stack — Arabic-aware search, autocomplete
+and a Google-Places-shaped API — because ranking prospects needs the same
+corpus, conflation and category repair that search does.
+
+Every number below was measured on a real build of Olaya
+(bbox `46.665,24.700,46.690,24.725`), not estimated.
+
+## Ranking prospects is the opposite of ranking search results
+
+The corpus already scores places by `prominence` — how well attested and well
+known they are. Sorting "has a phone, has no website" by that puts **Kingdom
+Centre, Dunkin' Donuts, Hardee's, Audi and Sephora** on top. All of them have
+corporate web teams; their website is missing from *the data*, not from the
+world. Prominence is precisely the wrong signal here.
+
+`gala/leads.py` scores the opposite qualities:
+
+| Signal | Why |
+|---|---|
+| Has a phone | Otherwise there is nothing to act on — hard requirement |
+| No **real** website | An Instagram page is not a website |
+| Not a chain | A branch cannot buy a website; head office already did |
+| Trade that buys websites | A salon does, an ATM does not |
+| Alive | Review counts, or Overture confidence as a weak fallback |
+
+**A social-only presence outranks no presence at all.** A business on Instagram
+or Linktree has already shown it wants to be findable and settled for someone
+else's platform. `business.site` — Google's free one-page stub — is close to a
+signed confession.
+
+Two bugs worth recording, both found by testing rather than reading:
+
+- `(^|\.)linktr\.ee|linkin\.bio` binds the anchor to the *first* alternative
+  only, so `https://linktr.ee/x` (slash before the domain, no dot) classified
+  as a real website — the exact case the list exists to catch.
+- `normalize("Hardee's")` returned `"hardee s"`, matching neither the brand
+  lexicon's `"hardees"` nor a user typing it, so a chain read as an
+  independent business. Apostrophes are now deleted, not spaced.
+
+## Qualifying leads with SerpApi (optional)
+
+The corpus knows a business exists and has no website. It cannot tell a thriving
+restaurant from a dead one with the sign still up — and that decides whether a
+lead is worth a call. `gala/enrich/serpapi.py` fills that in:
+
+```bash
+export SERPAPI_KEY=...
+python scripts/leads.py olaya --enrich --csv leads.csv
+```
+
+One request returns ~20 places with ratings, so a district costs 12 calls, not
+one per business — comfortably inside the 250/month free tier.
+
+**These fields are rented, not owned.** Google's terms permit caching place IDs
+indefinitely but not ratings, hours or prices. They are stored in separate
+`serpapi_*` columns with a `serpapi_fetched_at` stamp, kept out of the search
+index and out of every export, and `purge_stale()` clears them after 30 days.
+The open corpus stays the part you own; this is a live overlay on top of it.
+
+## The places API underneath
+
+```bash
 uvicorn gala.api:app --port 8000
 curl -G localhost:8000/v1/places:searchText \
      --data-urlencode 'textQuery=قهوة' -d 'latitude=24.7114&longitude=46.6744'
@@ -208,6 +284,7 @@ gala/
   normalize.py         Arabic folding, synonyms, romanisation
   hours.py             OSM opening_hours parser
   rank.py              prominence model + RatingsProvider seam
+  leads.py             prospect scoring: real-website detection, chain filter
   quality.py           category repair, brand lexicon, de-duplication
   search.py            BM25 + name match + distance + prominence
   store.py             DuckDB schema and inverted index
@@ -217,9 +294,11 @@ gala/
   enrich/overpass.py   bulk OSM fetch with mirror failover
   enrich/osm.py        Nominatim client (single-place lookups)
   enrich/wikidata.py   photos, attribution, notability
+  enrich/serpapi.py    Google ratings overlay (optional, TTL-bound)
   enrich/pipeline.py   conflation and orchestration
-scripts/build.py       end-to-end build
-tests/                 74 tests, no network required
+scripts/build.py       end-to-end corpus build
+scripts/leads.py       rank prospects, group by street, export CSV
+tests/                 99 tests, no network required
 ```
 
 ## Data sources and attribution

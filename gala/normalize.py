@@ -52,8 +52,14 @@ _LETTERS = str.maketrans(
 # Arabic-Indic (U+0660..) and Extended Arabic-Indic (U+06F0..) digits.
 _DIGITS = str.maketrans({chr(0x0660 + i): str(i) for i in range(10)} | {chr(0x06F0 + i): str(i) for i in range(10)})
 
-# Punctuation, including the Arabic comma/semicolon/question mark, collapses to
-# a space so "Al-Nakheel Mall" and "Al Nakheel Mall" tokenize identically.
+# Apostrophes are deleted rather than spaced. Turning them into a break splits
+# "Hardee's" into "hardee s", which then matches neither the brand lexicon's
+# "hardees" nor a user typing "hardees" -- a chain silently reads as an
+# independent business.
+_APOSTROPHE = re.compile(r"['\u2019\u02bc\u02bb`\u00b4]")
+
+# Remaining punctuation, including the Arabic comma/semicolon/question mark,
+# collapses to a space so "Al-Nakheel Mall" and "Al Nakheel Mall" tokenize alike.
 _PUNCT = re.compile(r"[^\w\s؀-ۿ]+", re.UNICODE)
 _WS = re.compile(r"\s+")
 
@@ -130,6 +136,7 @@ def normalize(text: str | None) -> str:
     text = text.casefold()
     text = fold_arabic(text)
     text = text.translate(_DIGITS)
+    text = _APOSTROPHE.sub("", text)
     text = _PUNCT.sub(" ", text)
     return _WS.sub(" ", text).strip()
 
