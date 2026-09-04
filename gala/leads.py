@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 
 import duckdb
 
+from .config import BBox
 from .normalize import normalize
 from .quality import BRAND_CATEGORIES
 
@@ -131,6 +132,7 @@ class Lead:
     lat: float
     address: str | None
     locality: str | None
+    district: str | None
     website: str | None
     web_presence: str          # "none" | the platform name | "real site"
     rating: float | None
@@ -253,13 +255,15 @@ def find_leads(
     *,
     locality: str | None = None,
     categories: list[str] | None = None,
+    bbox: "BBox | None" = None,
     min_score: float = 0.35,
     limit: int = 200,
 ) -> list[Lead]:
     """Rank the corpus as prospects, best first."""
     sql = """
         SELECT id, name_primary, name_ar, coalesce(category_final, category) AS category,
-               phone, lon, lat, address_freeform, locality, website,
+               phone, lon, lat, address_freeform, locality,
+               district, website,
                brand_name, brand_wikidata, confidence, serpapi_rating, serpapi_reviews
         FROM places
         WHERE coalesce(duplicate_of, '') = ''
@@ -272,11 +276,16 @@ def find_leads(
     if categories:
         sql += f" AND coalesce(category_final, category) IN ({','.join('?' * len(categories))})"
         params += categories
+    if bbox is not None:
+        # One store can hold many districts, so a district run has to filter
+        # geographically or it reports the whole city every time.
+        sql += " AND lon BETWEEN ? AND ? AND lat BETWEEN ? AND ?"
+        params += [bbox.min_lon, bbox.max_lon, bbox.min_lat, bbox.max_lat]
 
     chains = chain_names(con)
     leads: list[Lead] = []
     for row in con.execute(sql, params).fetchall():
-        (pid, name, name_ar, category, phone, lon, lat, address, loc, website,
+        (pid, name, name_ar, category, phone, lon, lat, address, loc, district, website,
          brand_name, brand_qid, confidence, rating, reviews) = row
         presence = classify_website(website)
         score, reasons = score_lead(
@@ -296,7 +305,7 @@ def find_leads(
             continue
         leads.append(Lead(
             id=pid, name=name, name_ar=name_ar, category=category, phone=phone,
-            lon=lon, lat=lat, address=address, locality=loc, website=website,
+            lon=lon, lat=lat, address=address, locality=loc, district=district, website=website,
             web_presence=presence, rating=rating, review_count=reviews,
             score=round(score, 4), reasons=reasons,
         ))

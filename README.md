@@ -5,25 +5,65 @@ A prospecting tool for web developers, built on an open-data places corpus:
 opening hours, **Wikidata** for photos, optional **SerpApi** for Google ratings.
 No API key needed for the core, no per-query billing.
 
-It answers one question: *which businesses near me are real, reachable, and have
-no website?* In the Olaya district of Riyadh that is **284 prospects out of
-1,506 places**, ranked so the ones worth calling are at the top.
+It answers one question: *which businesses here are real, reachable, and have no
+website?* Across Jeddah that is **2,346 prospects out of 21,899 places**, split
+across 113 districts and ranked so the ones worth calling come first.
+
+Prospecting happens **district by district** — calling a whole city is not a
+plan, calling one district is.
 
 ```bash
 pip install -r requirements.txt
-python scripts/build.py olaya                    # build the corpus (~2 min)
-python scripts/leads.py olaya --csv leads.csv    # rank prospects, export
+
+# 1. Build the city once (~5 min, 21,899 places labelled into 149 districts)
+python scripts/build.py --city jeddah --all-districts --db data/jeddah.duckdb
+
+# 2. Ask where to start
+python scripts/districts.py jeddah --rank --db data/jeddah.duckdb
+
+# 3. Work one district
+python scripts/leads.py --district "الروضة" --city jeddah \
+    --db data/jeddah.duckdb --csv rawdah.csv
 ```
 
 ```
-  #  score  name                    category       phone            presence
-  1  0.837  Cilicia                 restaurant     +966114655678    instagram
-  2  0.837  Back Yard Grill         restaurant     +966500654018    whatsapp
-  3  0.830  Lalingi                 restaurant     +966555036792    instagram
-  6  0.814  Viola                   wedding_plan   +966550888166    free site builder
-  8  0.795  ألفا كافيه               coffee_shop    +966502192245    google business stub
-  9  0.789  Dr. Mustafa Mansour     dentist        +966507896250    google link
+district                       prospects  places   rate
+الروضة                               206    1678    12%
+البلد                                135    1040    13%
+الصفاء                               101     740    14%
+الخالدية                              99     848    12%
+السلامة                               96     709    14%
 ```
+
+Inside a district:
+
+```
+  #  score  name                          category       phone            presence
+  1  0.837  Dania's Salon                 beauty_salon   +966506671072    google link
+  3  0.824  مطعم أفران حلب                 restaurant     +966581713191    instagram
+  4  0.821  عيادات نجم الأفق لطب الأسنان    dentist        +966126693880    whatsapp
+ 10  0.788  Pioneer Coffee                coffee_shop    +966555514856    google business stub
+```
+
+## Districts
+
+The unit of work comes from OpenStreetMap, and its shape differs sharply by
+city. Riyadh's districts are mostly polygons with real boundaries; **Jeddah's
+are almost entirely single points — 171 of 176 carry no extent at all.** A
+catalog that only accepted polygons would cover 3% of Jeddah.
+
+So a point district gets a box derived from how far its nearest neighbour is:
+half that distance, clamped to 0.7–2.5 km. Districts packed tightly downtown get
+small boxes, isolated ones on the edge get large ones — much closer to reality
+than one fixed radius, and labelled `derived` rather than passed off as a real
+boundary.
+
+One detail that is easy to get wrong: a square in metres is not a square in
+degrees. Longitude shrinks with the cosine of latitude, which at Jeddah is a 7%
+difference — enough to under-cover every district east and west if ignored.
+
+Building the whole city in one Overture pass and labelling afterwards costs one
+scan instead of 176.
 
 Underneath it is a full places search stack — Arabic-aware search, autocomplete
 and a Google-Places-shaped API — because ranking prospects needs the same
@@ -285,6 +325,7 @@ gala/
   hours.py             OSM opening_hours parser
   rank.py              prominence model + RatingsProvider seam
   leads.py             prospect scoring: real-website detection, chain filter
+  districts.py         district catalog, derived extents, place-to-district
   quality.py           category repair, brand lexicon, de-duplication
   search.py            BM25 + name match + distance + prominence
   store.py             DuckDB schema and inverted index
@@ -298,7 +339,9 @@ gala/
   enrich/pipeline.py   conflation and orchestration
 scripts/build.py       end-to-end corpus build
 scripts/leads.py       rank prospects, group by street, export CSV
-tests/                 99 tests, no network required
+scripts/districts.py   list, search, rank and refresh districts
+gala/data/             shipped district catalogs (no network needed to use)
+tests/                 110 tests, no network required
 ```
 
 ## Data sources and attribution

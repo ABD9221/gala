@@ -101,3 +101,14 @@ def test_find_leads_returns_contactable_prospects(con):
 def test_leads_are_sorted_best_first(con):
     scores = [l.score for l in find_leads(con, min_score=0.0)]
     assert scores == sorted(scores, reverse=True)
+
+
+def test_bbox_filter_scopes_to_one_district(con):
+    """One store holds a whole city, so a district run must filter or it
+    reports every district every time."""
+    from gala.config import BBox
+
+    inside = find_leads(con, min_score=0.0, bbox=BBox(46.66, 24.70, 46.69, 24.72))
+    everywhere = find_leads(con, min_score=0.0)
+    assert len(inside) < len(everywhere)
+    assert "Far Away Cafe" not in [l.name for l in inside]

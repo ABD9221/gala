@@ -67,7 +67,9 @@ CREATE TABLE IF NOT EXISTS places (
     serpapi_hours      VARCHAR,
     serpapi_price      VARCHAR,
     serpapi_place_id   VARCHAR,
-    serpapi_fetched_at TIMESTAMP
+    serpapi_fetched_at TIMESTAMP,
+    -- The unit of work for prospecting: set by gala.districts.stamp().
+    district           VARCHAR
 );
 
 CREATE INDEX IF NOT EXISTS places_lonlat ON places (lon, lat);
@@ -90,6 +92,7 @@ MIGRATIONS = [
     "ALTER TABLE places ADD COLUMN IF NOT EXISTS serpapi_price VARCHAR",
     "ALTER TABLE places ADD COLUMN IF NOT EXISTS serpapi_place_id VARCHAR",
     "ALTER TABLE places ADD COLUMN IF NOT EXISTS serpapi_fetched_at TIMESTAMP",
+    "ALTER TABLE places ADD COLUMN IF NOT EXISTS district VARCHAR",
 ]
 
 

@@ -4,7 +4,10 @@ __pycache__/
 venv/
 *.duckdb
 *.duckdb.wal
-data/
+# Only the top-level store directory. A bare `data/` also swallowed
+# gala/data/, which holds the shipped district catalogs -- reference data the
+# package needs, not generated output.
+/data/
 .cache/
 .pytest_cache/
 .env

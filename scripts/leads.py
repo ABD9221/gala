@@ -26,7 +26,7 @@ from gala.leads import find_leads
 from gala.store import connect
 
 CSV_COLUMNS = [
-    "score", "name", "name_ar", "category", "phone", "web_presence",
+    "score", "district", "name", "name_ar", "category", "phone", "web_presence",
     "rating", "reviews", "address", "locality", "maps_url", "why",
 ]
 
@@ -39,6 +39,8 @@ def maps_url(lat: float, lon: float) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("preset", nargs="?", default="olaya", choices=sorted(PRESETS))
+    ap.add_argument("--district", help="one district by name (Arabic or English)")
+    ap.add_argument("--city", default="jeddah", help="city the district belongs to")
     ap.add_argument("--bbox", help="min_lon,min_lat,max_lon,max_lat (overrides preset)")
     ap.add_argument("--db", default=DB_PATH)
     ap.add_argument("--category", nargs="*", help="restrict to these categories")
@@ -51,7 +53,20 @@ def main() -> int:
     ap.add_argument("--max-calls", type=int, default=12, help="cap SerpApi calls")
     args = ap.parse_args()
 
-    bbox = BBox(*map(float, args.bbox.split(","))) if args.bbox else PRESETS[args.preset]
+    district = None
+    if args.district:
+        from gala.districts import find
+        district = find(args.district, args.city)
+        if district is None:
+            print(f"no district matching {args.district!r} in {args.city}.", file=sys.stderr)
+            print(f"Try: python scripts/districts.py {args.city} --search {args.district}", file=sys.stderr)
+            return 2
+        bbox = district.bbox
+        print(f"district: {district.label}  ({district.area_km2:.1f} km²)\n")
+    elif args.bbox:
+        bbox = BBox(*map(float, args.bbox.split(",")))
+    else:
+        bbox = PRESETS[args.preset]
     con = connect(args.db)
 
     if args.enrich:
@@ -67,7 +82,7 @@ def main() -> int:
 
     leads = find_leads(
         con, locality=args.locality, categories=args.category,
-        min_score=args.min_score, limit=args.limit,
+        bbox=bbox, min_score=args.min_score, limit=args.limit,
     )
 
     if not leads:
@@ -81,6 +96,11 @@ def main() -> int:
         rating = f" {lead.rating}★×{lead.review_count}" if lead.rating else ""
         print(f"{i:3}  {lead.score:5.3f}  {str(lead.name)[:32]:32}  "
               f"{str(lead.category)[:22]:22}  {str(lead.phone):16}  {lead.web_presence}{rating}")
+
+    if any(l.district for l in leads):
+        print("\nby district (work them one at a time):")
+        for name, n in Counter(l.district for l in leads if l.district).most_common(12):
+            print(f"   {n:4}  {name}")
 
     print("\nby trade:")
     for category, n in Counter(l.category for l in leads).most_common(10):
@@ -105,7 +125,8 @@ def main() -> int:
             writer.writeheader()
             for lead in leads:
                 writer.writerow({
-                    "score": lead.score, "name": lead.name, "name_ar": lead.name_ar or "",
+                    "score": lead.score, "district": lead.district or "",
+                    "name": lead.name, "name_ar": lead.name_ar or "",
                     "category": lead.category or "", "phone": lead.phone or "",
                     "web_presence": lead.web_presence,
                     "rating": lead.rating or "", "reviews": lead.review_count or "",

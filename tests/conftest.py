@@ -12,7 +12,9 @@ FIXTURES = [
     ("Zara Kingdom Centre", None, "clothing_store", 46.6746, 24.7116, None, None, "Kingdom Centre, Olaya St", 0.88, 2, None),
     ("صيدلية النهدي", "صيدلية النهدي", "pharmacy", 46.6760, 24.7100, "+966920003222", None, "Olaya St", 0.9, 3, "Mo-Su 08:00-24:00"),
     ("كرسبي كريم", None, "pharmacy", 46.6739, 24.7118, None, None, "Olaya St", 0.96, 2, None),
-    ("Far Away Cafe", None, "cafe", 46.7400, 24.7800, None, None, "Elsewhere", 0.7, 1, None),
+    # Contactable and without a website, so it qualifies as a lead -- which is
+    # what makes it useful for proving the bbox filter actually excludes it.
+    ("Far Away Cafe", None, "cafe", 46.7400, 24.7800, "+966500000000", None, "Elsewhere", 0.7, 1, None),
 ]
 
 

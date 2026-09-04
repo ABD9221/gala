@@ -49,6 +49,7 @@ CELL = 0.002
 class EnrichReport:
     overture_places: int = 0
     osm_pois: int = 0
+    osm_error: str | None = None
     matched: int = 0
     got_name_ar: int = 0
     got_name_en: int = 0
@@ -154,8 +155,18 @@ def enrich_bbox(con: duckdb.DuckDBPyConnection, bbox: BBox) -> EnrichReport:
         [bbox.min_lon, bbox.max_lon, bbox.min_lat, bbox.max_lat],
     ).fetchall()
 
-    pois = fetch_pois(bbox)
-    report = EnrichReport(overture_places=len(rows), osm_pois=len(pois))
+    # OSM enrichment adds Arabic names, opening hours and some category
+    # corrections -- all valuable, none essential. Overpass is a free service
+    # that rate-limits and goes down, so a failure here degrades the result
+    # instead of destroying the run: the corpus, the category repair and the
+    # lead list are all still produced without it.
+    try:
+        pois = fetch_pois(bbox)
+        osm_error = None
+    except (RuntimeError, OSError) as exc:
+        pois, osm_error = [], str(exc)[:200]
+
+    report = EnrichReport(overture_places=len(rows), osm_pois=len(pois), osm_error=osm_error)
 
     matches = resolve_matches(candidate_pairs(rows, pois))
     report.matched = len(matches)
