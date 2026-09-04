@@ -8,3 +8,8 @@ data/
 .cache/
 .pytest_cache/
 .env
+
+# Generated lead exports. Regenerable with `python scripts/leads.py`, and they
+# carry real business phone numbers -- contact data does not belong in git.
+leads*.csv
+*.leads.csv
