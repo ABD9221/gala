@@ -103,6 +103,51 @@ CATEGORY_FIT: dict[str, float] = {
 }
 DEFAULT_CATEGORY_FIT = 0.55  # unknown trade: plausible, not promoted
 
+# Google returns categories in Arabic, and none of them match the English slugs
+# above -- measured at 0 of 377 rows in the Mraykh sweep, meaning every Google
+# lead was being scored on the default. Google's vocabulary also has a long
+# tail ("متجر مفروشات المتاجر الصغيرة والكبيرة"), so an exact-match table would
+# keep missing. Keywords are checked against the *normalized* category, most
+# specific first: "صيدلية" has to be tested before the generic "متجر", or a
+# pharmacy scores as retail.
+ARABIC_CATEGORY_FIT: list[tuple[str, float]] = [
+    # Never worth a website.
+    ("صراف", 0.0), ("بنك", 0.0), ("مسجد", 0.0), ("جامع", 0.0),
+    ("حكوم", 0.0), ("سفاره", 0.0), ("شرطه", 0.0), ("بريد", 0.0),
+    ("محطه وقود", 0.15), ("محطة بنزين", 0.15),
+    # Walk-in trade.
+    ("صيدل", 0.3), ("بقاله", 0.35), ("سوبرماركت", 0.35), ("تموينات", 0.3),
+    ("مغسل", 0.5), ("غسيل سيارات", 0.4),
+    # Appointment-driven: the strongest fit there is.
+    ("صالون", 1.0), ("حلاق", 1.0), ("تجميل", 1.0), ("سبا", 1.0),
+    ("عياده", 1.0), ("اسنان", 1.0), ("مستوصف", 1.0), ("طبي", 0.95),
+    ("مركز صحي", 0.95), ("بيطري", 1.0), ("علاج طبيعي", 1.0),
+    # Hospitals have in-house IT and procurement; a freelancer does not sell
+    # them a website. Placed before the "طبي" rule so it wins.
+    ("مستشفي", 0.1),
+    ("رياض", 0.95), ("لياقه", 0.95), ("نادي", 0.9),
+    ("حفلات", 1.0), ("زفاف", 1.0), ("مناسبات", 1.0), ("كوش", 1.0),
+    ("حدث", 1.0), ("احداث", 1.0), ("تنظيم", 0.95), ("مدرب", 0.9),
+    ("تصوير", 1.0), ("مصور", 1.0), ("سياح", 0.95), ("سفر", 0.95),
+    # Hospitality.
+    ("مطعم", 1.0), ("مقهي", 0.95), ("كافيه", 0.95), ("كوفي", 0.95),
+    ("مخبز", 0.9), ("حلويات", 0.9), ("عصير", 0.7), ("بوفيه", 0.8),
+    ("فندق", 0.9), ("شقق مفروشه", 0.9), ("استراحه", 0.85),
+    # Considered-purchase retail.
+    ("مفروشات", 1.0), ("اثاث", 1.0), ("مجوهرات", 1.0), ("ذهب", 1.0),
+    ("زهور", 1.0), ("ورد", 1.0), ("هدايا", 1.0), ("عطور", 0.9),
+    ("ملابس", 0.9), ("ازياء", 0.9), ("عبايات", 0.95), ("خياط", 0.9),
+    ("سيارات", 0.9), ("ورشه", 0.9), ("قطع غيار", 0.85),
+    ("الكترون", 0.85), ("جوال", 0.85), ("كمبيوتر", 0.85),
+    ("نظارات", 0.85), ("بصريات", 0.85), ("معرض", 0.9),
+    # Professional services.
+    ("محام", 1.0), ("محاسب", 1.0), ("عقار", 1.0), ("تامين", 0.9),
+    ("استشار", 0.9), ("تسويق", 0.8), ("دعايه", 0.8), ("مقاول", 0.85),
+    ("تدريب", 0.9), ("معهد", 0.9), ("مدرسه", 0.8), ("حضانه", 0.9),
+    # Generic retail catch-alls, tested last so specifics win.
+    ("متجر", 0.85), ("محل", 0.85), ("مركز تسوق", 0.5), ("سوق", 0.5),
+]
+
 # A name appearing this many times in one corpus is a chain, whatever the brand
 # fields say. Deriving it from the data catches local chains no lexicon lists.
 CHAIN_BRANCH_THRESHOLD = 3
@@ -152,9 +197,24 @@ def classify_website(url: str | None) -> str:
 
 
 def category_fit(category: str | None) -> float:
+    """How much a website is worth to this trade, 0..1.
+
+    Handles both vocabularies: Overture's English slugs by exact match, and
+    Google's free-form Arabic by keyword. The Arabic pass runs against the
+    normalized string so that ``عيادة`` and ``عياده`` -- and every other
+    spelling users and Google alternate between -- reach the same rule.
+    """
     if not category:
         return DEFAULT_CATEGORY_FIT
-    return CATEGORY_FIT.get(category, DEFAULT_CATEGORY_FIT)
+    if category in CATEGORY_FIT:
+        return CATEGORY_FIT[category]
+
+    folded = normalize(category)
+    if folded:
+        for keyword, fit in ARABIC_CATEGORY_FIT:
+            if normalize(keyword) in folded:
+                return fit
+    return DEFAULT_CATEGORY_FIT
 
 
 def chain_names(con: duckdb.DuckDBPyConnection, *, threshold: int = CHAIN_BRANCH_THRESHOLD) -> set[str]:

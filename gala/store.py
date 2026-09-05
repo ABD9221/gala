@@ -93,6 +93,11 @@ MIGRATIONS = [
     "ALTER TABLE places ADD COLUMN IF NOT EXISTS serpapi_place_id VARCHAR",
     "ALTER TABLE places ADD COLUMN IF NOT EXISTS serpapi_fetched_at TIMESTAMP",
     "ALTER TABLE places ADD COLUMN IF NOT EXISTS district VARCHAR",
+    # Which upstream a row came from: 'overture' (open corpus) or 'serpapi'
+    # (Google, via SerpApi). The two carry different rights -- Overture rows are
+    # owned outright, SerpApi rows are a licensed live copy with a cache life --
+    # so anything that exports or retains data has to be able to tell them apart.
+    "ALTER TABLE places ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT 'overture'",
 ]
 
 

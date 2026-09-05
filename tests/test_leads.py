@@ -112,3 +112,41 @@ def test_bbox_filter_scopes_to_one_district(con):
     everywhere = find_leads(con, min_score=0.0)
     assert len(inside) < len(everywhere)
     assert "Far Away Cafe" not in [l.name for l in inside]
+
+
+@pytest.mark.parametrize("arabic,expected", [
+    # Google returns categories in Arabic; none matched the English slug table,
+    # so every Google lead was scoring on the default until this pass existed.
+    ("صالون حلاقة", 1.0),
+    ("عِيادة أسنان", 1.0),      # with a diacritic, as Google actually returns it
+    ("متجر زهور", 1.0),
+    ("مطعم", 1.0),
+    ("كافيه", 0.95),
+    ("صالة رياضة", 0.95),
+    ("متجر ملابس", 0.9),
+    ("صيدلية", 0.3),
+    ("محطة وقود", 0.15),
+    ("مستشفى عام", 0.1),
+    ("صراف آلي", 0.0),
+    ("مسجد", 0.0),
+])
+def test_arabic_category_fit(arabic, expected):
+    assert category_fit(arabic) == expected
+
+
+def test_arabic_fit_handles_googles_long_tail():
+    """Exact matching would miss these; keyword matching does not."""
+    assert category_fit("متجر مفروشات المتاجر الصغيرة والكبيرة") == 1.0
+    assert category_fit("مطعم مأكولات مطبوخة بالبخار") == 1.0
+
+
+def test_specific_arabic_rules_beat_generic_ones():
+    """A pharmacy is a متجر too; order in the table is what keeps it at 0.3."""
+    assert category_fit("صيدلية") < category_fit("متجر ملابس")
+    assert category_fit("مستشفى") < category_fit("عيادة أسنان")
+
+
+def test_english_slugs_still_win():
+    """Overture rows must keep their exact-match behaviour."""
+    assert category_fit("restaurant") == 1.0
+    assert category_fit("atm") == 0.0

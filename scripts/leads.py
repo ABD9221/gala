@@ -38,7 +38,12 @@ def maps_url(lat: float, lon: float) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("preset", nargs="?", default="olaya", choices=sorted(PRESETS))
+    # No default preset. Defaulting to a Riyadh district silently filtered a
+    # Jeddah store down to nothing and reported "no leads matched", which reads
+    # as an empty corpus rather than a wrong filter. With no area given, the
+    # whole store is reported.
+    ap.add_argument("preset", nargs="?", choices=sorted(PRESETS),
+                    help="a built-in area; omit to report the whole store")
     ap.add_argument("--district", help="one district by name (Arabic or English)")
     ap.add_argument("--city", default="jeddah", help="city the district belongs to")
     ap.add_argument("--bbox", help="min_lon,min_lat,max_lon,max_lat (overrides preset)")
@@ -65,8 +70,10 @@ def main() -> int:
         print(f"district: {district.label}  ({district.area_km2:.1f} km²)\n")
     elif args.bbox:
         bbox = BBox(*map(float, args.bbox.split(",")))
-    else:
+    elif args.preset:
         bbox = PRESETS[args.preset]
+    else:
+        bbox = None  # whole store
     con = connect(args.db)
 
     if args.enrich:
