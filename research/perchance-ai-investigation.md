@@ -687,3 +687,44 @@ One SEO article surfaced in search states Perchance "uses client-side browser ex
 prompts never hit external servers." **This is false and was directly disproved here**: prompts
 travel to `image-generation.perchance.org` (§3.1, §4.2), and generation is server-side on GPUs
 the operator pays for. Noted because the claim circulates widely.
+
+## 18. MEASURED — gallery save rate, and a sanity check on volume
+
+The throughput measurement referred to above **did** complete (an earlier note in this document
+saying it produced no number was wrong). Method: load the gallery for
+`ai-text-to-image-generator` sorted by **recent**, snapshot the top 200 `data-image-id` content
+hashes, wait, re-snapshot, and count hashes not present in the first set.
+
+```
+SNAP1  200 ids  @ 2026-09-21T23:12:51Z   (first = bf3aa86a55fe)
+SNAP2  200 ids  @ 2026-09-21T23:18:03Z   (first = 1709ef047237)
+elapsed 5.20 min      new in SNAP2 = 6
+=> 1.15 gallery-saved images / minute
+```
+
+Only 6 of 200 turned over, so the window did **not** saturate — this is a real rate, not a
+floor imposed by the sample size.
+
+```
+1.15/min  =  1,656/day  =  ~49,700/month      (public gallery saves, ONE generator)
+```
+
+**What it does and does not tell us.** Gallery saves require an explicit user action, so they
+are a small and *unknown* fraction of generations. Scaling by the assumed public-save rate:
+
+| assumed save rate | implied images/month, this generator |
+|---|---|
+| 5 % | 1.0 M |
+| 2 % | 2.5 M |
+| 1 % | 5.0 M |
+| 0.5 % | 9.9 M |
+
+§16's model assumes ~27 M images/month **sitewide** (all AI image generators share this
+backend). If `ai-text-to-image-generator` is the flagship and contributes roughly 20–30 % of
+that, it would be doing ~5–8 M/month, implying a public-save rate of **~0.6–1 %** — entirely
+plausible for a public gallery.
+
+**So the measurement is order-of-magnitude consistent with §16's assumptions.** That is a
+sanity check, not a confirmation: the save rate is the free parameter and it is unmeasured.
+The honest summary is that nothing found in this investigation forces the volume estimate to be
+wrong, and nothing pins it down either.
