@@ -569,3 +569,121 @@ read as: **unlimited per human, closed to automation, and capped at 0.59 MP.**
 apply**, unless Perchance runs `Chroma1-Flash` or a similar few-step variant. The dev's Oct-2025
 "~2× faster" update is consistent with exactly such a variant swap. Step count remains **unknown**
 and is still the single largest lever in the model.
+
+---
+
+# THIRD PASS — "the ads can't possibly cover this"
+
+A reasonable objection: *even at a negligible per-image cost, one small footer banner cannot
+fund years of free, unlimited generation that returns six images almost instantly — there must
+be a free or near-free compute source.*
+
+This pass tests that. Two parts of the objection turn out to rest on premises that the
+architecture and the traffic data do not support. A third part is correct and stays open.
+
+## 14. The "six images instantly" premise is explained by architecture, not cheap compute
+
+This is the part the first pass already proved without realising its significance.
+
+**Six images is not one GPU producing six images.** §3.1 established that the plugin emits
+**one independent `/embed` iframe per image**. Six images means **six separate HTTP requests**
+arriving at the load balancer, which can dispatch them to **six different workers**. The
+`thread=0..N` slots (§4.1), each holding its own `userKey`, are exactly the client-side
+mechanism for this parallelism.
+
+So the wall-clock a user perceives for a 6-image batch is **the latency of ONE image**, not six.
+No unusual hardware is needed to make that feel instant — only enough fleet capacity to absorb
+concurrent requests.
+
+### 14.1 …but this refines the model inference, and against my own §11
+
+If a 768×768 image really does land in ~2–4 s, that is **evidence against** the 26–40-step
+de-distilled Chroma reading in §11, which would take considerably longer even on a 4090. The
+observation points toward a **few-step variant** — `Chroma1-Flash`, or another distilled
+configuration — which is also consistent with the dev's Oct-2025 "~2× faster" update.
+
+**Net effect: §11's model-family inference (Chroma lineage, from working CFG + negative
+prompts) still stands, but the step count almost certainly sits at the fast end, not 26–40.**
+That moves cost back toward the cheap column, and §13's revision was too pessimistic.
+
+## 15. The "tiny banner" premise understates the revenue by an order of magnitude
+
+The banner is one unit, but the multiplier is traffic × depth, and Perchance's depth is unusual.
+
+Third-party panel data (July 2026):
+
+| Metric | Value | Source |
+|---|---|---|
+| Monthly visits | **22.6 M** | Similarweb |
+| Monthly visits | **51.6 M** | Semrush |
+| **Pages per visit** | **6.30** | Similarweb |
+| Avg visit duration | **6 min 02 s** | Similarweb |
+| Bounce rate | 53.63 % | Similarweb |
+
+The two panels disagree by 2.3×, which is methodology, not error — the honest range is
+"tens of millions of visits a month."
+
+**6.3 pages per visit is the number that breaks the intuition.** The ad is not shown once per
+visitor; it is shown on every AI-plugin page they open, and they open ~6 per visit over ~6
+minutes. That is **~142 M pageviews/month** on the Similarweb figure, **~325 M** on Semrush —
+before any in-session ad refresh is counted.
+
+## 16. Does it close without free compute? — `research/perchance_economics.py`
+
+The model is committed as a runnable script so every assumption can be challenged and changed.
+
+```
+--- similarweb (22.6M visits) ---
+  ad impressions (A1: 50% of pages carry ads)      71 M
+  REVENUE  (A2: $0.30-1.00 RPM)            $21,357 ..  $71,190
+  images generated (A3: 15% of visits x A4: 8 ea)  27.1 M
+  cost/image                              $0.00011 .. $0.00206
+  COST     (A5: 2-10 s/img, A6: $0.20-0.74/GPU-hr)  $3,013 ..  $55,747
+  => CLOSES at the cheap end
+
+--- semrush (51.6M visits) ---
+  REVENUE                                  $48,762 .. $162,540
+  COST                                      $6,880 .. $127,280
+  => CLOSES at the cheap end
+```
+
+**Conclusion: a free or donated compute source is NOT REQUIRED by the arithmetic.** At the
+cheap end — a few-step model on interruptible or owned GPUs — revenue exceeds cost by roughly
+an order of magnitude. At the expensive end — 26–40 steps with CFG on on-demand pricing —
+it does **not** close, which matches the dev's own 2023 admission that he was then paying part
+of the bill himself, and his 2025 claim of sustainability "+ a lot of work optimizing the load
+balancing server and GPU servers."
+
+Fleet sizing implied by the same assumptions: ~27 M images/month ≈ 10 images/second average.
+At 2–10 s/image that is **roughly 20–100 GPUs**, which at $0.20/hr spot is ~$3–15 k/month, or a
+one-off capex of ~$40–200 k if owned outright.
+
+## 17. Where the objection is RIGHT, and what stays unknown
+
+**The compute sourcing is genuinely undisclosed, and a near-free source cannot be ruled out.**
+I could not confirm or refute it:
+
+- The dev's economics posts (`lemmy.world/post/23831024`, `/post/37779986`) were re-read in
+  full for this pass. **He never states how GPU compute is sourced** — not rented, owned,
+  sponsored, spot, or donated. The only phrasing is "load balancing server + GPU servers."
+- Origin remains invisible behind Cloudflare (§12), so no provider, ASN or region is observable.
+
+Plausible near-free sources, **none verified**, listed only so the hypothesis is stated properly:
+
+| Candidate | Why plausible | Status |
+|---|---|---|
+| **Owned hardware** | Marginal cost = electricity. Fits a solo operator who stresses independence, "no investors, will never sell." | Unverified |
+| **Interruptible / distributed consumer GPUs** (spot, Vast, Salad-style) | $0.10–0.20/hr for 4090-class; image gen tolerates preemption well — a failed job is just a retry. | Unverified |
+| Sponsored / donated compute | Would fit "public good," but he has explicitly refused investors and has no donation link. | No evidence |
+
+**Bottom line.** The objection's conclusion ("he must have near-free compute") is *possible but
+not necessary*: the economics close on ordinary spot pricing once the real traffic depth is
+counted. The objection's premises ("six images is six GPUs' worth of work", "one banner is
+negligible") do not survive contact with the architecture (§14) and the traffic data (§15).
+
+### Correction to a widely-repeated claim
+
+One SEO article surfaced in search states Perchance "uses client-side browser execution, meaning
+prompts never hit external servers." **This is false and was directly disproved here**: prompts
+travel to `image-generation.perchance.org` (§3.1, §4.2), and generation is server-side on GPUs
+the operator pays for. Noted because the claim circulates widely.
